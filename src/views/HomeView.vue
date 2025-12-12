@@ -68,7 +68,7 @@ function onBackToWorld() {
   height: 100vh;
   position: relative;
   overflow: hidden;
-  background: #000;
+  background: transparent;
 }
 
 .scene-layer {

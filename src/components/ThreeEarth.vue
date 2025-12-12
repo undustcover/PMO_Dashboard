@@ -88,15 +88,15 @@ function initScene() {
   if (!container.value) return;
 
   // Scene
-  scene = new THREE.Scene();
-  // Brighter space background (dark blue gradient feel instead of pitch black)
-  scene.background = new THREE.Color(0x0a1a2a); 
-  // Fog for depth
-  scene.fog = new THREE.FogExp2(0x0a1a2a, 0.015);
+    scene = new THREE.Scene();
+    // Transparent background to let CSS gradients show through
+    scene.background = null; 
+    // Light fog to blend earth into the light background
+    scene.fog = new THREE.Fog(0xf0f4f8, 15, 40);
 
-  // Camera
+    // Camera
   camera = new THREE.PerspectiveCamera(45, container.value.clientWidth / container.value.clientHeight, 0.1, 1000);
-  camera.position.set(0, 5, 15);
+  camera.position.set(0, 0, 22); // Slightly closer
 
   // Renderer
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -112,11 +112,23 @@ function initScene() {
   controls.maxDistance = 20;
 
   // Lights
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); // Brighter ambient
-  scene.add(ambientLight);
-  const pointLight = new THREE.PointLight(0xffffff, 1.5);
-  pointLight.position.set(20, 20, 20);
-  scene.add(pointLight);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2); // Brighter ambient
+    scene.add(ambientLight);
+    
+    // Main directional light (Sun)
+    const sunLight = new THREE.DirectionalLight(0xffffff, 2.0);
+    sunLight.position.set(20, 20, 20);
+    scene.add(sunLight);
+
+    // Blue rim light for "tech" feel
+    const rimLight = new THREE.DirectionalLight(0x06b6d4, 1.5);
+    rimLight.position.set(-20, 10, -10);
+    scene.add(rimLight);
+
+    // Purple fill light
+    const fillLight = new THREE.DirectionalLight(0x7c3aed, 0.5);
+    fillLight.position.set(0, -20, 10);
+    scene.add(fillLight);
 
   // Earth Group
   earthGroup = new THREE.Group();
@@ -126,10 +138,11 @@ function initScene() {
   const geometry = new THREE.SphereGeometry(EARTH_RADIUS, 64, 64);
   const material = new THREE.MeshPhongMaterial({
     map: createEarthTexture(),
-    color: 0xffffff, // White to let texture show true colors
-    emissive: 0x222222, // Slightly brighter self-illumination for lighter theme
-    specular: 0x555555,
-    shininess: 10,
+    color: 0xffffff, // White base
+    emissive: 0x4466aa, // Blue emissive to lift shadows (Light Tech)
+    emissiveIntensity: 0.3,
+    specular: 0x666666, // Brighter specular
+    shininess: 15,
     transparent: false,
     opacity: 1
   });
@@ -140,9 +153,9 @@ function initScene() {
   // Atmosphere Glow (Simplified)
   const atmosGeo = new THREE.SphereGeometry(EARTH_RADIUS * 1.05, 64, 64);
   const atmosMat = new THREE.MeshBasicMaterial({
-    color: 0x4488ff,
+    color: 0x66ccff, // Lighter Cyan
     transparent: true,
-    opacity: 0.1,
+    opacity: 0.2, // Stronger glow
     side: THREE.BackSide,
     blending: THREE.AdditiveBlending
   });
@@ -325,7 +338,7 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100vh;
   overflow: hidden;
-  background: black;
+  background: transparent;
 }
 
 .tooltip {
