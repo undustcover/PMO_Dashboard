@@ -206,28 +206,363 @@ function addCountryMarker(country: CountryData) {
   earthGroup.add(ring);
 }
 
-function addLogisticsMarker(item: LogisticsItem) {
-  const pos = latLongToVector3(item.currentLat, item.currentLon, EARTH_RADIUS);
+// 3D Model Generators
+function createTruckModel(color: number): THREE.Group {
+  const group = new THREE.Group();
   
-  // Vehicle Mesh (Cube for truck, Cone for ship?)
-  const geometry = item.transportType === 'truck' 
-    ? new THREE.BoxGeometry(0.15, 0.15, 0.15)
-    : new THREE.ConeGeometry(0.1, 0.2, 8);
-    
-  const color = item.type === 'rig' ? 0xffff00 : (item.type === 'equipment' ? 0x00ff00 : 0x00ffff);
-  const material = new THREE.MeshLambertMaterial({ color });
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.position.copy(pos);
-  
-  // Orient outwards
-  mesh.lookAt(new THREE.Vector3(0,0,0)); // Face center
-  // Rotate 180 if needed to stand on surface
-  
-  mesh.userData = { type: 'logistics', data: item };
-  earthGroup.add(mesh);
+  // Trailer (Big box)
+  const trailerGeo = new THREE.BoxGeometry(0.1, 0.1, 0.25);
+  const trailerMat = new THREE.MeshPhongMaterial({ color: color });
+  const trailer = new THREE.Mesh(trailerGeo, trailerMat);
+  trailer.position.set(0, 0.08, -0.02);
+  group.add(trailer);
 
-  // TODO: Add movement animation along great circle if start/end known
-  // For now, just a static marker at "current" location
+  // Cab (Small box)
+  const cabGeo = new THREE.BoxGeometry(0.1, 0.08, 0.08);
+  const cabMat = new THREE.MeshPhongMaterial({ color: 0xffffff });
+  const cab = new THREE.Mesh(cabGeo, cabMat);
+  cab.position.set(0, 0.07, 0.15); // Forward
+  group.add(cab);
+  
+  // Wheels (4)
+  const wheelGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.11, 8);
+  const wheelMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+  
+  const w1 = new THREE.Mesh(wheelGeo, wheelMat);
+  w1.rotation.z = Math.PI/2; w1.position.set(0, 0.025, 0.12);
+  group.add(w1);
+  
+  const w2 = new THREE.Mesh(wheelGeo, wheelMat);
+  w2.rotation.z = Math.PI/2; w2.position.set(0, 0.025, -0.1);
+  group.add(w2);
+
+  return group;
+}
+
+function createShipModel(color: number): THREE.Group {
+  const group = new THREE.Group();
+  
+  // Hull (Base) - Dark
+  const hullGeo = new THREE.BoxGeometry(0.12, 0.04, 0.3);
+  const hullMat = new THREE.MeshPhongMaterial({ color: 0x333333 }); 
+  const hull = new THREE.Mesh(hullGeo, hullMat);
+  hull.position.y = 0.02;
+  group.add(hull);
+
+  // Deck - Color
+  const deckGeo = new THREE.BoxGeometry(0.12, 0.04, 0.28);
+  const deckMat = new THREE.MeshPhongMaterial({ color: color });
+  const deck = new THREE.Mesh(deckGeo, deckMat);
+  deck.position.set(0, 0.06, 0);
+  group.add(deck);
+
+  // Bridge (Rear)
+  const bridgeGeo = new THREE.BoxGeometry(0.1, 0.06, 0.08);
+  const bridgeMat = new THREE.MeshPhongMaterial({ color: 0xffffff });
+  const bridge = new THREE.Mesh(bridgeGeo, bridgeMat);
+  bridge.position.set(0, 0.11, -0.08);
+  group.add(bridge);
+
+  // Containers
+  const contGeo = new THREE.BoxGeometry(0.08, 0.04, 0.12);
+  const contMat = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+  const cont = new THREE.Mesh(contGeo, contMat);
+  cont.position.set(0, 0.1, 0.05);
+  group.add(cont);
+
+  return group;
+}
+
+function createPlaneModel(color: number): THREE.Group {
+  const group = new THREE.Group();
+  
+  // Fuselage
+  const bodyGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.3, 8);
+  bodyGeo.rotateX(Math.PI / 2); // Point Z
+  const bodyMat = new THREE.MeshPhongMaterial({ color: 0xffffff });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.position.y = 0.15; 
+  group.add(body);
+  
+  // Wings
+  const wingGeo = new THREE.BoxGeometry(0.4, 0.01, 0.08);
+  const wingMat = new THREE.MeshPhongMaterial({ color: color });
+  const wing = new THREE.Mesh(wingGeo, wingMat);
+  wing.position.set(0, 0.15, 0.05);
+  group.add(wing);
+  
+  // Tail
+  const tailGeo = new THREE.BoxGeometry(0.12, 0.01, 0.05);
+  const tail = new THREE.Mesh(tailGeo, wingMat);
+  tail.position.set(0, 0.15, -0.12);
+  group.add(tail);
+  
+  const vTailGeo = new THREE.BoxGeometry(0.01, 0.08, 0.05);
+  const vTail = new THREE.Mesh(vTailGeo, wingMat);
+  vTail.position.set(0, 0.19, -0.12);
+  group.add(vTail);
+
+  return group;
+}
+
+function createTrainModel(color: number): THREE.Group {
+  const group = new THREE.Group();
+  
+  // Locomotive
+  const locoGeo = new THREE.BoxGeometry(0.08, 0.08, 0.12);
+  const locoMat = new THREE.MeshPhongMaterial({ color: color });
+  const loco = new THREE.Mesh(locoGeo, locoMat);
+  loco.position.set(0, 0.06, 0.1);
+  group.add(loco);
+  
+  // Car
+  const carGeo = new THREE.BoxGeometry(0.08, 0.07, 0.15);
+  const carMat = new THREE.MeshPhongMaterial({ color: 0xcccccc });
+  const car = new THREE.Mesh(carGeo, carMat);
+  car.position.set(0, 0.055, -0.05);
+  group.add(car);
+  
+  // Wheels
+  const wheelGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.09, 8);
+  const wheelMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+  
+  for(let i=0; i<3; i++) {
+      const w = new THREE.Mesh(wheelGeo, wheelMat);
+      w.rotation.z = Math.PI/2;
+      w.position.set(0, 0.02, 0.12 - i*0.1);
+      group.add(w);
+  }
+
+  return group;
+}
+
+function createTransportPath(start: THREE.Vector3, end: THREE.Vector3, color: number, type: 'truck' | 'ship' | 'plane' | 'train', waypoints?: THREE.Vector3[]) {
+  const points: THREE.Vector3[] = [];
+  
+  if (waypoints && waypoints.length > 0) {
+    // Multi-segment path
+    const allPoints = [start, ...waypoints, end];
+    
+    for (let i = 0; i < allPoints.length - 1; i++) {
+      const p1 = allPoints[i];
+      const p2 = allPoints[i+1];
+      const segmentPoints = 10; // Points per segment
+      
+      for (let j = 0; j < segmentPoints; j++) { // Don't include last point to avoid dupes, except very last
+        if (i > 0 && j === 0) continue; // Skip first point of segment if not first segment
+
+        const t = j / segmentPoints;
+        const p = new THREE.Vector3().copy(p1).lerp(p2, t).normalize();
+        p.multiplyScalar(EARTH_RADIUS * 1.01); // Sea level
+        points.push(p);
+      }
+    }
+    points.push(end.clone().normalize().multiplyScalar(EARTH_RADIUS * 1.01));
+
+  } else {
+    // Direct Great Circle
+    const numControlPoints = 20; 
+    points.push(start.clone());
+    
+    for (let i = 1; i < numControlPoints; i++) {
+      const t = i / numControlPoints;
+      const p = new THREE.Vector3().copy(start).lerp(end, t).normalize();
+      
+      let altitude = EARTH_RADIUS * 1.01; 
+      if (type === 'plane') {
+        const heightFactor = Math.sin(t * Math.PI); 
+        const angle = start.angleTo(end);
+        const maxAltitude = EARTH_RADIUS * (1 + angle * 0.8); 
+        altitude = EARTH_RADIUS + heightFactor * (maxAltitude - EARTH_RADIUS);
+      }
+      
+      p.multiplyScalar(altitude);
+      points.push(p);
+    }
+    points.push(end.clone());
+  }
+  
+  const curve = new THREE.CatmullRomCurve3(points);
+  // Curve type centripetal to avoid loops
+  curve.curveType = 'centripetal';
+  
+  // Differentiate visual style based on type
+  let mesh: THREE.Object3D;
+  
+  if (type === 'truck') {
+    // Highway Style: TubeGeometry (Thick solid line)
+    const tubeGeo = new THREE.TubeGeometry(curve, 100, 0.03, 8, false); // Radius 0.03
+    const tubeMat = new THREE.MeshLambertMaterial({
+      color: color,
+      transparent: true,
+      opacity: 0.9
+    });
+    mesh = new THREE.Mesh(tubeGeo, tubeMat);
+    
+  } else if (type === 'train') {
+    // Railway Style: Dashed Line (Tracks)
+    const curvePoints = curve.getPoints(200); // More points for smooth dashing
+    const geometry = new THREE.BufferGeometry().setFromPoints(curvePoints);
+    const lineMat = new THREE.LineDashedMaterial({
+      color: color,
+      linewidth: 1,
+      scale: 1,
+      dashSize: 0.1,
+      gapSize: 0.1,
+      transparent: true,
+      opacity: 0.8
+    });
+    const line = new THREE.Line(geometry, lineMat);
+    line.computeLineDistances(); // Required for dashed line
+    mesh = line;
+
+  } else if (type === 'ship') {
+    // Ship Style: Dotted Line (Sea route)
+    const curvePoints = curve.getPoints(150); 
+    const geometry = new THREE.BufferGeometry().setFromPoints(curvePoints);
+    const lineMat = new THREE.LineDashedMaterial({
+      color: color,
+      linewidth: 1,
+      scale: 1,
+      dashSize: 0.05,
+      gapSize: 0.1, // Sparse dots
+      transparent: true,
+      opacity: 0.6
+    });
+    const line = new THREE.Line(geometry, lineMat);
+    line.computeLineDistances();
+    mesh = line;
+
+  } else {
+    // Plane: Solid thin line (default)
+    const curvePoints = curve.getPoints(100); 
+    const geometry = new THREE.BufferGeometry().setFromPoints(curvePoints);
+    const material = new THREE.LineBasicMaterial({ 
+      color: color,
+      transparent: true,
+      opacity: 0.5,
+      linewidth: 1
+    });
+    mesh = new THREE.Line(geometry, material);
+  }
+  
+  return { mesh, curve };
+}
+
+function addLogisticsMarker(item: LogisticsItem) {
+  // Color & Model Selection
+  let colorHex = 0xffffff;
+  let model: THREE.Group;
+
+  switch (item.transportType) {
+    case 'truck':
+      colorHex = 0xffa500; // Orange
+      model = createTruckModel(colorHex);
+      break;
+    case 'ship':
+      colorHex = 0x00bfff; // DeepSkyBlue
+      model = createShipModel(colorHex);
+      break;
+    case 'plane':
+      colorHex = 0x00ffff; // Cyan
+      model = createPlaneModel(colorHex);
+      break;
+    case 'train':
+      colorHex = 0x32cd32; // LimeGreen
+      model = createTrainModel(colorHex);
+      break;
+    default:
+      colorHex = 0xffffff;
+      model = createTruckModel(colorHex);
+  }
+  
+  // Attach Data for Interaction
+  model.userData = { type: 'logistics', data: item };
+  // Recursively attach to all children
+  model.traverse((child) => {
+    if (child instanceof THREE.Mesh) {
+      child.userData = { parentGroup: model };
+    }
+  });
+
+  // 2. Position and Path
+  if (
+    Number.isFinite(item.startLat) && Number.isFinite(item.startLon) && 
+    Number.isFinite(item.destLat) && Number.isFinite(item.destLon)
+  ) {
+     const startPos = latLongToVector3(item.startLat, item.startLon, EARTH_RADIUS);
+     const destPos = latLongToVector3(item.destLat, item.destLon, EARTH_RADIUS);
+     
+     // Convert waypoints if present
+     let waypointVectors: THREE.Vector3[] | undefined = undefined;
+     if (item.waypoints) {
+       waypointVectors = item.waypoints.map(w => latLongToVector3(w.lat, w.lon, EARTH_RADIUS));
+     }
+
+     // Create Path
+     const { mesh: pathLine, curve } = createTransportPath(startPos, destPos, colorHex, item.transportType, waypointVectors);
+     earthGroup.add(pathLine);
+
+     // Calculate position on curve
+     // For complex paths, simple angle ratio is not enough. 
+     // We need distance along curve.
+     
+     // Calculate total length
+     const totalLength = curve.getLength();
+     
+     // Approximate current position ratio
+     // Since we don't have real-time tracking along the specific path segments,
+     // we can estimate 't' based on (dist start->current) / (dist start->dest)
+     // BUT, for waypoint paths, 'current' might be far from the straight line.
+     // Better: project current position onto the curve.
+     // For visualization demo: Just use a time-based animation or static ratio?
+     // User provided 'currentLat/Lon'. Let's find the closest point on curve.
+     
+     const currentPosSurface = latLongToVector3(item.currentLat, item.currentLon, EARTH_RADIUS);
+     
+     // Find t where curve.getPoint(t) is closest to currentPosSurface
+     // Simple search
+     let minD = Infinity;
+     let bestT = 0;
+     const divisions = 100;
+     for (let i=0; i<=divisions; i++) {
+        const t = i/divisions;
+        const pt = curve.getPoint(t);
+        const d = pt.distanceTo(currentPosSurface);
+        if (d < minD) {
+            minD = d;
+            bestT = t;
+        }
+     }
+     
+     // Refine search around bestT
+     const window = 1/divisions;
+     for (let i=0; i<20; i++) {
+        const t = Math.max(0, Math.min(1, bestT - window/2 + i*(window/20)));
+        const pt = curve.getPoint(t);
+        const d = pt.distanceTo(currentPosSurface);
+        if (d < minD) {
+            minD = d;
+            bestT = t;
+        }
+     }
+
+     const pointOnCurve = curve.getPoint(bestT);
+     model.position.copy(pointOnCurve);
+     
+     // Orient along path
+     const lookAtPoint = curve.getPoint(Math.min(1, bestT + 0.01));
+     model.lookAt(lookAtPoint);
+
+  } else {
+    // Fallback
+    const pos = latLongToVector3(item.currentLat, item.currentLon, EARTH_RADIUS);
+    model.position.copy(pos);
+    model.lookAt(pos.clone().multiplyScalar(2)); 
+    model.position.multiplyScalar(1.02);
+  }
+
+  earthGroup.add(model);
 }
 
 function animate() {
@@ -250,10 +585,33 @@ function onMouseMove(event: MouseEvent) {
   mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
   raycaster.setFromCamera(mouse, camera);
-  const intersects = raycaster.intersectObjects(earthGroup.children);
+  const intersects = raycaster.intersectObjects(earthGroup.children, true);
+
+  let foundTarget: THREE.Object3D | null = null;
 
   if (intersects.length > 0) {
-    const obj = intersects[0].object;
+    for (const intersect of intersects) {
+       const obj = intersect.object;
+       // Ignore Earth and Atmosphere if they block interaction (optional, but good practice)
+       if (obj === earthGroup.children.find(c => c.name === 'EARTH')) continue;
+       
+       if (obj.userData.type === 'country') {
+         foundTarget = obj;
+         break;
+       }
+       if (obj.userData.parentGroup) {
+         foundTarget = obj.userData.parentGroup;
+         break;
+       }
+       if (obj.parent && obj.parent.userData.type === 'logistics') {
+         foundTarget = obj.parent;
+         break;
+       }
+    }
+  }
+
+  if (foundTarget) {
+    const obj = foundTarget;
     if (obj.userData.type === 'country') {
       document.body.style.cursor = 'pointer';
       const data = obj.userData.data as CountryData;
@@ -268,7 +626,7 @@ function onMouseMove(event: MouseEvent) {
       };
       tooltipPos.value = { x: event.clientX + 10, y: event.clientY + 10 };
       // Highlight effect
-      (obj as THREE.Mesh).scale.setScalar(1.5);
+      obj.scale.setScalar(1.5);
     } else if (obj.userData.type === 'logistics') {
       document.body.style.cursor = 'pointer';
       const data = obj.userData.data as LogisticsItem;
@@ -281,32 +639,53 @@ function onMouseMove(event: MouseEvent) {
         }
       };
       tooltipPos.value = { x: event.clientX + 10, y: event.clientY + 10 };
-    } else {
-      document.body.style.cursor = 'default';
-      hoveredInfo.value = null;
-      // Reset scales (simplified, should track hovered object)
-      earthGroup.children.forEach(child => {
-        if (child.userData.type === 'country') child.scale.setScalar(1);
-      });
+      // Highlight
+      obj.scale.setScalar(1.5);
     }
   } else {
     document.body.style.cursor = 'default';
     hoveredInfo.value = null;
+    // Reset scales
+    earthGroup.children.forEach(child => {
+      if (child.userData.type === 'country' || child.userData.type === 'logistics') {
+        child.scale.setScalar(1);
+      }
+    });
   }
 }
 
 function onClick(event: MouseEvent) {
   if (hoveredInfo.value) {
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(earthGroup.children);
+    const intersects = raycaster.intersectObjects(earthGroup.children, true);
+    
+    let foundTarget: THREE.Object3D | null = null;
     if (intersects.length > 0) {
-      const obj = intersects[0].object;
+        for (const intersect of intersects) {
+            const obj = intersect.object;
+            if (obj.userData.type === 'country') {
+                foundTarget = obj;
+                break;
+            }
+            if (obj.userData.parentGroup) {
+                foundTarget = obj.userData.parentGroup;
+                break;
+            }
+            if (obj.parent && obj.parent.userData.type === 'logistics') {
+                foundTarget = obj.parent;
+                break;
+            }
+        }
+    }
+
+    if (foundTarget) {
+      const obj = foundTarget;
       if (obj.userData.type === 'country') {
         const data = obj.userData.data as CountryData;
         emit('select-country', data);
         
         // Zoom logic
-        const targetPos = obj.position.clone().multiplyScalar(2); // Move camera closer in direction of country
+        const targetPos = obj.position.clone().multiplyScalar(2); 
         gsap.to(camera.position, {
           x: targetPos.x,
           y: targetPos.y,

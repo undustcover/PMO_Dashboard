@@ -17,11 +17,15 @@ export interface CountryData {
 export interface LogisticsItem {
   id: string;
   type: 'rig' | 'equipment' | 'material';
-  transportType: 'truck' | 'ship';
+  transportType: 'truck' | 'ship' | 'plane' | 'train';
   name: string;
   project: string;
   startLocation: string;
+  startLat: number;
+  startLon: number;
   destination: string;
+  destLat: number;
+  destLon: number;
   startDate: string;
   arrivalDate: string;
   currentLat: number;
@@ -38,6 +42,8 @@ export interface LogisticsItem {
 
   materialModel?: string;
   useDate?: string;
+  
+  waypoints?: Array<{lat: number, lon: number}>;
 }
 
 export interface CompanyStats {
@@ -109,7 +115,11 @@ export function useMockData() {
       name: 'CC70012钻机',
       project: '鲁迈拉油田项目',
       startLocation: '上海港',
+      startLat: 31.2304,
+      startLon: 121.4737,
       destination: '巴士拉港',
+      destLat: 30.5081,
+      destLon: 47.7835,
       startDate: '2025-11-01',
       arrivalDate: '2025-12-20',
       currentLat: 10.0, // Indian Ocean
@@ -118,16 +128,29 @@ export function useMockData() {
       rigModel: 'ZJ70D',
       factoryDate: '2020-05-15',
       unit: '国际工程公司',
-      startDrillDate: '2026-01-15'
+      startDrillDate: '2026-01-15',
+      waypoints: [
+        { lat: 25.0, lon: 123.0 }, // East China Sea
+        { lat: 5.0, lon: 108.0 }, // South China Sea
+        { lat: 1.5, lon: 104.0 }, // Singapore
+        { lat: 5.8, lon: 95.0 }, // Malacca Exit
+        { lat: 6.0, lon: 80.0 }, // South of Sri Lanka
+        { lat: 15.0, lon: 60.0 }, // Arabian Sea
+        { lat: 26.0, lon: 56.5 }  // Hormuz
+      ]
     },
     {
       id: 'L002',
       type: 'equipment',
-      transportType: 'truck',
+      transportType: 'train', // Changed to train for variety
       name: '顶驱装置DQ-90',
       project: '土库曼复兴气田',
       startLocation: '西安',
+      startLat: 34.3416,
+      startLon: 108.9398,
       destination: '阿什哈巴德',
+      destLat: 37.9601,
+      destLon: 58.3261,
       startDate: '2025-12-01',
       arrivalDate: '2025-12-15',
       currentLat: 40.0,
@@ -142,13 +165,61 @@ export function useMockData() {
       name: '高强度钻杆',
       project: '厄瓜多尔14区块',
       startLocation: '天津港',
+      startLat: 39.0842,
+      startLon: 117.2009,
       destination: '瓜亚基尔港',
+      destLat: -2.1894,
+      destLon: -79.8891,
       startDate: '2025-10-20',
       arrivalDate: '2025-12-30',
       currentLat: 20.0, // Pacific
       currentLon: -140.0,
       materialModel: 'G105',
-      useDate: '2026-01-10'
+      useDate: '2026-01-10',
+      waypoints: [
+        { lat: 30.0, lon: 130.0 }, // South of Japan
+        { lat: 20.0, lon: 180.0 }, // Central Pacific
+        { lat: 10.0, lon: -140.0 }, // East Pacific
+        { lat: 0.0, lon: -100.0 }   // Galapagos Vicinity
+      ]
+    },
+    {
+      id: 'L004',
+      type: 'equipment',
+      transportType: 'plane',
+      name: '精密测井仪',
+      project: '伊拉克鲁迈拉项目',
+      startLocation: '北京',
+      startLat: 39.9042,
+      startLon: 116.4074,
+      destination: '巴格达',
+      destLat: 33.3152,
+      destLon: 44.3661,
+      startDate: '2025-12-10',
+      arrivalDate: '2025-12-11',
+      currentLat: 35.0, 
+      currentLon: 60.0,
+      equipmentModel: 'ECLIPS-5700',
+      requiredDate: '2025-12-12'
+    },
+    {
+      id: 'L005',
+      type: 'material',
+      transportType: 'truck',
+      name: '化工助剂',
+      project: '孟加拉项目',
+      startLocation: '昆明',
+      startLat: 24.8801,
+      startLon: 102.8329,
+      destination: '达卡',
+      destLat: 23.8103,
+      destLon: 90.4125,
+      startDate: '2025-12-05',
+      arrivalDate: '2025-12-12',
+      currentLat: 24.0, 
+      currentLon: 95.0,
+      materialModel: 'Polymer-X',
+      useDate: '2025-12-15'
     }
   ]);
 
