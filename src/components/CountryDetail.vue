@@ -1,42 +1,60 @@
 <template>
   <div class="country-detail-overlay">
-    <button class="back-btn" @click="$emit('back')">← 返回世界视图</button>
+    <!-- Header with Glass Effect -->
+    <header class="detail-header">
+      <button class="back-btn" @click="$emit('back')">
+        <i class="icon-back">←</i> 返回世界视图
+      </button>
+      <h1 class="title">{{ country.name }} 项目详情</h1>
+    </header>
     
     <div class="detail-container">
-      <div class="left-col">
-        <h2>{{ country.name }} 项目详情</h2>
+      <div class="left-col panel">
+        <div class="panel-header">
+          <h3><i class="icon-chart"></i>关键指标</h3>
+        </div>
         <div class="stats-grid">
           <div class="stat-card">
             <label>项目总数</label>
-            <div class="val">{{ country.projectCount }}</div>
+            <div class="val gradient-text-blue">{{ country.projectCount }}</div>
           </div>
            <div class="stat-card">
-            <label>总收入</label>
-            <div class="val">{{ country.income }}亿</div>
+            <label>总收入(亿)</label>
+            <div class="val gradient-text-purple">{{ country.income }}</div>
           </div>
            <div class="stat-card">
-            <label>总成本</label>
-            <div class="val">{{ country.cost }}亿</div>
+            <label>总成本(亿)</label>
+            <div class="val gradient-text-warning">{{ country.cost }}</div>
           </div>
            <div class="stat-card">
             <label>整体进度</label>
-            <div class="val">{{ country.progress }}%</div>
+            <div class="val gradient-text-success">{{ country.progress }}%</div>
           </div>
         </div>
 
-        <div class="project-list">
-          <h3>作业队伍与项目</h3>
-          <ul>
-            <li v-for="i in country.projectCount" :key="i">
-              <span class="team-name">第{{ 100 + i }}钻井队</span>
-              <span class="project-name">{{ country.name }}区块{{ i }}号井项目</span>
-              <span class="status">进行中</span>
-            </li>
-          </ul>
+        <div class="project-list-container">
+          <div class="panel-header">
+            <h3><i class="icon-list"></i>作业队伍与项目</h3>
+          </div>
+          <div class="project-list scrollable-content">
+            <div v-for="i in country.projectCount" :key="i" class="project-item">
+              <div class="item-header">
+                <span class="team-name">第{{ 100 + i }}钻井队</span>
+                <span class="status-badge">进行中</span>
+              </div>
+              <div class="project-name">{{ country.name }}区块{{ i }}号井项目</div>
+              <div class="progress-bar">
+                <div class="fill" :style="{ width: (Math.random() * 30 + 60) + '%' }"></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="right-col map-placeholder">
+      <div class="right-col panel map-panel">
+        <div class="panel-header">
+           <h3><i class="icon-map"></i>作业分布图</h3>
+        </div>
         <!-- ECharts container for the country map -->
         <div ref="mapChart" class="echarts-map"></div>
       </div>
@@ -45,7 +63,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, defineProps } from 'vue';
+import { ref, onMounted, defineProps, watch } from 'vue';
 import * as echarts from 'echarts';
 import type { CountryData } from '../composables/useMockData';
 
@@ -56,133 +74,362 @@ const props = defineProps<{
 defineEmits(['back']);
 
 const mapChart = ref<HTMLElement | null>(null);
+let myChart: echarts.ECharts | null = null;
 
-onMounted(() => {
-  if (mapChart.value) {
-    const chart = echarts.init(mapChart.value);
+const initMap = () => {
+  if (!mapChart.value) return;
+  
+  if (myChart) {
+      myChart.dispose();
+  }
+  myChart = echarts.init(mapChart.value);
+  myChart.showLoading();
+
+  // Mapping from ISO2 (Mock Data) to ISO3 (GeoBoundaries)
+  const iso2ToIso3: Record<string, string> = {
+      'TM': 'TKM', 'PK': 'PAK', 'EC': 'ECU', 
+      'BD': 'BGD', 'IQ': 'IRQ', 'PE': 'PER',
+      'CN': 'CHN'
+  };
+
+  const iso3 = iso2ToIso3[props.country.id] || props.country.id;
+  
+  // Try to fetch detailed province-level data (Admin 1)
+  let detailedUrl = '';
+  let nameProp = 'name'; // Default for Natural Earth and Aliyun
+
+  if (iso3 === 'CHN') {
+      // Use Aliyun DataV for China (Chinese names)
+      detailedUrl = 'https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json';
+      nameProp = 'name';
+  } else {
+      // Use geoBoundaries for others (Local/English names)
+      // Using media.githubusercontent.com to resolve Git LFS files correctly
+      detailedUrl = `https://media.githubusercontent.com/media/wmgeolab/geoBoundaries/main/releaseData/gbOpen/${iso3}/ADM1/geoBoundaries-${iso3}-ADM1.geojson`;
+      nameProp = 'shapeName';
+  }
+  
+  // Fallback URL (Admin 0 - Outline only)
+  const fallbackUrl = 'https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_110m_admin_0_countries.geojson';
+
+  console.log(`Loading map for ${props.country.name} (${iso3})...`);
+
+  fetch(detailedUrl)
+    .then(res => {
+        if (!res.ok) throw new Error(`Detailed map not found: ${res.statusText}`);
+        return res.json();
+    })
+    .then(geojson => {
+      console.log('Detailed map loaded successfully');
+      renderMap(geojson, true, nameProp);
+    })
+    .catch((err) => {
+        // Fallback to Natural Earth Admin 0
+        console.warn(`Detailed map for ${iso3} failed: ${err.message}. Falling back to world outline.`);
+        fetch(fallbackUrl)
+            .then(res => res.json())
+            .then(geojson => {
+                 // Filter for the selected country feature
+                 const feature = geojson.features.find((f: any) => 
+                    f.properties.name === props.country.nameEn || 
+                    f.properties.sov_a3 === iso3 ||
+                    f.properties.adm0_a3 === iso3
+                 );
+                 if (feature) {
+                     renderMap({ type: 'FeatureCollection', features: [feature] }, false, 'name');
+                 } else {
+                     showError('暂无地图数据');
+                 }
+            })
+            .catch(err => {
+                console.error('Failed to load fallback map:', err);
+                showError('地图加载失败');
+            });
+    });
+};
+
+const showError = (msg: string) => {
+    myChart?.hideLoading();
+    myChart?.setOption({
+        title: { 
+            text: msg, 
+            left: 'center', 
+            top: 'center',
+            textStyle: { color: '#64748b' }
+        }
+    });
+};
+
+const renderMap = (geojson: any, isDetailed: boolean, nameProp: string = 'name') => {
+    myChart?.hideLoading();
+    echarts.registerMap('countryMap', geojson);
     
-    // Simulate a map with scatter points since we lack GeoJSON
-    // In a real app, we would load the specific GeoJSON for props.country.nameEn
+    // Generate simulated project locations
     const data = Array.from({ length: props.country.projectCount }).map((_, i) => ({
-      name: `项目点${i+1}`,
-      value: [
-        Math.random() * 100, // Simulated X
-        Math.random() * 100  // Simulated Y
-      ]
+        name: `项目${i+1}`,
+        value: [
+            props.country.lon + (Math.random() - 0.5) * (isDetailed ? 2 : 5), 
+            props.country.lat + (Math.random() - 0.5) * (isDetailed ? 2 : 5)
+        ]
     }));
 
-    chart.setOption({
-      title: {
-        text: `${props.country.name} 作业分布图 (模拟)`,
-        left: 'center',
-        textStyle: { color: '#fff' }
-      },
-      grid: { top: 60, bottom: 40, left: 40, right: 40 },
-      xAxis: { show: false, min: 0, max: 100 },
-      yAxis: { show: false, min: 0, max: 100 },
-      series: [
-        {
-          type: 'scatter',
-          symbolSize: 20,
-          data: data,
-          itemStyle: { color: '#ffbd00' },
-          label: {
-            show: true,
-            formatter: '{b}',
-            position: 'right',
-            color: '#fff'
-          }
+    const option: echarts.EChartsOption = {
+        backgroundColor: 'transparent',
+        tooltip: {
+            trigger: 'item',
+            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+            borderColor: '#fff',
+            textStyle: { color: '#333' },
+            formatter: (params: any) => {
+                if (params.componentType === 'series') {
+                    return `${params.marker} ${params.name}`;
+                } else if (params.componentType === 'geo') {
+                    // Try to get name from properties using the specified property name
+                    const props = params.data?.properties || {};
+                    return props[nameProp] || props.name || params.name; 
+                }
+                return '';
+            }
         },
-        {
-          type: 'effectScatter', // Ripple effect
-          coordinateSystem: 'cartesian2d',
-          data: data,
-          symbolSize: 20,
-          showEffectOn: 'render',
-          rippleEffect: { brushType: 'stroke' },
-          itemStyle: { color: '#ffbd00' }
-        }
-      ]
-    });
+        geo: {
+            map: 'countryMap',
+            roam: true,
+            zoom: 1.2,
+            label: {
+                show: isDetailed, // Show labels only if we have detailed provinces
+                color: '#64748b',
+                fontSize: 10,
+                formatter: (params: any) => {
+                     return params.name; 
+                }
+            },
+            itemStyle: {
+                areaColor: '#e0f2fe',
+                borderColor: '#0ea5e9',
+                borderWidth: 1,
+                shadowColor: 'rgba(0, 0, 0, 0.1)',
+                shadowBlur: 10
+            },
+            emphasis: {
+                itemStyle: { areaColor: '#bae6fd' },
+                label: { show: true, color: '#0f172a' }
+            },
+            // Use the dynamically determined name property
+            nameProperty: nameProp 
+        },
+        series: [
+            {
+                name: '项目分布',
+                type: 'effectScatter',
+                coordinateSystem: 'geo',
+                data: data,
+                symbolSize: 15,
+                showEffectOn: 'render',
+                rippleEffect: { brushType: 'stroke', scale: 3 },
+                itemStyle: { color: '#f59e0b', shadowBlur: 10, shadowColor: '#333' },
+                label: {
+                    show: true,
+                    formatter: '{b}',
+                    position: 'right',
+                    color: '#334155',
+                    fontWeight: 'bold',
+                    fontSize: 12
+                },
+                zlevel: 1
+            }
+        ]
+    };
     
-    window.addEventListener('resize', () => chart.resize());
-  }
+    myChart?.setOption(option);
+};
+
+onMounted(() => {
+  initMap();
+  window.addEventListener('resize', () => myChart?.resize());
 });
+
+// Watch for country changes if the component is kept alive (though v-if in parent usually remounts)
+watch(() => props.country, () => {
+    initMap();
+});
+
 </script>
 
 <style scoped lang="scss">
+// Variables matching DashboardOverlay.vue
+$text-primary: #0f172a;
+$text-secondary: #64748b;
+$panel-bg: linear-gradient(145deg, rgba(255, 255, 255, 0.85) 0%, rgba(240, 249, 255, 0.75) 100%);
+$panel-border: rgba(255, 255, 255, 0.9);
+$panel-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+
+$grad-primary: linear-gradient(135deg, #2563eb 0%, #06b6d4 100%);
+$grad-success: linear-gradient(135deg, #059669 0%, #34d399 100%);
+$grad-warning: linear-gradient(135deg, #d97706 0%, #fbbf24 100%);
+$grad-purple: linear-gradient(135deg, #7c3aed 0%, #c084fc 100%);
+
 .country-detail-overlay {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(10, 15, 30, 0.95); // High opacity to cover the globe
+  // Light gray-blue background matching Home/Dashboard
+  background: #f1f5f9; 
   z-index: 500;
-  padding: 40px;
+  padding: 24px;
   box-sizing: border-box;
-  color: #fff;
+  color: $text-primary;
   display: flex;
   flex-direction: column;
+  font-family: 'Inter', sans-serif;
 }
 
-.back-btn {
-  align-self: flex-start;
-  padding: 10px 20px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: #fff;
-  cursor: pointer;
-  margin-bottom: 30px;
-  border-radius: 4px;
-  &:hover { background: rgba(255, 255, 255, 0.2); }
+.detail-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 24px;
+  position: relative;
+  
+  .back-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 24px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    color: $text-primary;
+    cursor: pointer;
+    border-radius: 100px;
+    font-weight: 600;
+    font-size: 14px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    transition: all 0.2s;
+    
+    &:hover { 
+      background: #f8fafc;
+      transform: translateX(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+  }
+  
+  .title {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 28px;
+    font-weight: 800;
+    margin: 0;
+    color: #1e3a8a;
+  }
 }
 
 .detail-container {
   display: flex;
   flex: 1;
-  gap: 40px;
+  gap: 24px;
+  overflow: hidden; // Prevent full page scroll
+  
+  .panel {
+    background: $panel-bg;
+    backdrop-filter: blur(24px);
+    border: 1px solid $panel-border;
+    box-shadow: $panel-shadow;
+    border-radius: 24px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+  }
   
   .left-col {
     flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 30px;
+    max-width: 450px;
+    gap: 24px;
     
-    h2 { font-size: 32px; margin: 0; color: #00d2ff; }
+    .panel-header {
+       margin-bottom: 16px;
+       h3 {
+         margin: 0;
+         font-size: 18px;
+         color: #334155;
+         display: flex;
+         align-items: center;
+         gap: 8px;
+       }
+    }
     
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
-      gap: 20px;
+      gap: 16px;
+      
       .stat-card {
-        background: rgba(255,255,255,0.05);
-        padding: 20px;
-        border-radius: 8px;
-        label { display: block; font-size: 14px; opacity: 0.6; margin-bottom: 5px; }
-        .val { font-size: 24px; font-weight: bold; }
+        background: rgba(255,255,255,0.6);
+        padding: 16px;
+        border-radius: 16px;
+        border: 1px solid rgba(255,255,255,0.8);
+        
+        label { display: block; font-size: 12px; color: $text-secondary; margin-bottom: 4px; font-weight: 600; }
+        .val { font-size: 24px; font-weight: 800; }
+        
+        .gradient-text-blue { background: $grad-primary; -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .gradient-text-purple { background: $grad-purple; -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .gradient-text-warning { background: $grad-warning; -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .gradient-text-success { background: $grad-success; -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
       }
     }
 
-    .project-list {
+    .project-list-container {
       flex: 1;
-      overflow-y: auto;
-      background: rgba(255,255,255,0.05);
-      padding: 20px;
-      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0; // For flex scroll
       
-      h3 { margin-top: 0; }
-      
-      ul {
-        list-style: none;
-        padding: 0;
-        li {
-          display: flex;
-          justify-content: space-between;
-          padding: 15px 0;
-          border-bottom: 1px solid rgba(255,255,255,0.1);
-          .team-name { color: #00d2ff; }
-          .status { color: #00ff9d; }
+      .project-list {
+        flex: 1;
+        overflow-y: auto;
+        padding-right: 8px;
+        
+        // Scrollbar styling
+        &::-webkit-scrollbar { width: 4px; }
+        &::-webkit-scrollbar-track { background: transparent; }
+        &::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+        .project-item {
+          background: white;
+          padding: 16px;
+          border-radius: 12px;
+          margin-bottom: 12px;
+          border: 1px solid #f1f5f9;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+          transition: transform 0.2s;
+          
+          &:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+          
+          .item-header {
+             display: flex;
+             justify-content: space-between;
+             margin-bottom: 8px;
+             .team-name { font-weight: 700; color: #3b82f6; font-size: 13px; }
+             .status-badge { 
+                background: #ecfdf5; 
+                color: #059669; 
+                padding: 2px 8px; 
+                border-radius: 100px; 
+                font-size: 11px; 
+                font-weight: 600;
+             }
+          }
+          
+          .project-name { font-weight: 600; font-size: 14px; margin-bottom: 10px; color: $text-primary; }
+          
+          .progress-bar {
+             height: 6px;
+             background: #f1f5f9;
+             border-radius: 3px;
+             overflow: hidden;
+             .fill { height: 100%; background: $grad-success; border-radius: 3px; }
+          }
         }
       }
     }
@@ -190,10 +437,23 @@ onMounted(() => {
 
   .right-col {
     flex: 2;
-    background: rgba(0,0,0,0.3);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 12px;
+    padding: 0; // Map fills panel
+    overflow: hidden;
     position: relative;
+    
+    .panel-header {
+        position: absolute;
+        top: 24px;
+        left: 24px;
+        z-index: 10;
+        background: rgba(255,255,255,0.8);
+        backdrop-filter: blur(8px);
+        padding: 8px 16px;
+        border-radius: 100px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        
+        h3 { margin: 0; font-size: 16px; color: #334155; display: flex; align-items: center; gap: 8px; }
+    }
     
     .echarts-map {
       width: 100%;

@@ -162,10 +162,8 @@ function initScene() {
   const atmosphere = new THREE.Mesh(atmosGeo, atmosMat);
   earthGroup.add(atmosphere);
 
-  // Add Country Markers
-  countries.value.forEach(country => {
-    addCountryMarker(country);
-  });
+  // Add Country Markers (Now Outlines)
+  loadCountryGeoJson();
 
   // Add Logistics
   logistics.value.forEach(item => {
@@ -180,33 +178,255 @@ function initScene() {
   animate();
 }
 
-function addCountryMarker(country: CountryData) {
-  const pos = latLongToVector3(country.lat, country.lon, EARTH_RADIUS);
+// GeoJSON Loading & Mesh Generation
+function loadCountryGeoJson() {
+  const url = 'https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_110m_admin_0_countries.geojson';
   
-  // Marker Mesh (a pin or dot)
-  const geometry = new THREE.SphereGeometry(0.1, 16, 16);
-  const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-  const marker = new THREE.Mesh(geometry, material);
-  marker.position.copy(pos);
-  marker.userData = { type: 'country', data: country };
-  
-  // Pulse ring
-  const ringGeo = new THREE.RingGeometry(0.12, 0.15, 32);
-  const ringMat = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide, transparent: true });
-  const ring = new THREE.Mesh(ringGeo, ringMat);
-  ring.position.copy(pos);
-  ring.lookAt(new THREE.Vector3(0,0,0)); // Face center
-  
-  // Animate ring (manual simple animation in render loop or GSAP)
-  gsap.to(ring.scale, {
-    x: 2, y: 2, duration: 1.5, repeat: -1, yoyo: true, ease: "power1.inOut"
-  });
+  fetch(url)
+    .then(res => res.json())
+    .then(data => {
+      data.features.forEach((feature: any) => {
+        // Match with our mock data
+        const countryData = countries.value.find(c => 
+          c.nameEn === feature.properties.name || 
+          c.nameEn === feature.properties.name_long ||
+          c.nameEn === feature.properties.formal_en
+        );
 
-  earthGroup.add(marker);
-  earthGroup.add(ring);
+        if (countryData) {
+          createCountryMesh(feature, countryData);
+        }
+      });
+    })
+    .catch(err => console.error('Failed to load GeoJSON:', err));
 }
 
-// 3D Model Generators
+function createCountryMesh(feature: any, countryData: CountryData) {
+  const type = feature.geometry.type;
+  const coords = feature.geometry.coordinates;
+  
+  const material = new THREE.MeshBasicMaterial({
+    color: 0x0044ff,
+    transparent: true,
+    opacity: 0.3,
+    side: THREE.DoubleSide
+  });
+
+  const lineMaterial = new THREE.LineBasicMaterial({ color: 0x00d2ff });
+
+  const processPolygon = (polygon: any[]) => {
+    const shape = new THREE.Shape();
+    const points3D: THREE.Vector3[] = [];
+    
+    polygon.forEach((ring: any[], ringIndex: number) => {
+      // 2D Shape for Triangulation (Lat/Lon space)
+      let currentPath: THREE.Path | THREE.Shape = shape;
+      
+      if (ringIndex > 0) {
+         const holePath = new THREE.Path();
+         shape.holes.push(holePath);
+         currentPath = holePath;
+      }
+
+      ring.forEach((point: any, i: number) => {
+        const [lon, lat] = point;
+        if (i === 0) {
+          currentPath.moveTo(lon, lat);
+        } else {
+          currentPath.lineTo(lon, lat);
+        }
+        
+        // 3D Line Loop - Only add exterior ring to avoid connecting lines between rings
+        if (ringIndex === 0) {
+            points3D.push(latLongToVector3(lat, lon, EARTH_RADIUS * 1.002));
+        }
+      });
+    });
+
+    // 1. Create Mesh (Fill)
+    const geometry = new THREE.ShapeGeometry(shape);
+    
+    // Morph to Sphere
+    const posAttribute = geometry.attributes.position;
+    for (let i = 0; i < posAttribute.count; i++) {
+      const lon = posAttribute.getX(i);
+      const lat = posAttribute.getY(i);
+      const vec = latLongToVector3(lat, lon, EARTH_RADIUS * 1.001); // Slightly above earth
+      posAttribute.setXYZ(i, vec.x, vec.y, vec.z);
+    }
+    geometry.computeVertexNormals();
+
+    const mesh = new THREE.Mesh(geometry, material.clone());
+    mesh.userData = { type: 'country', data: countryData, originalColor: 0x0044ff };
+    earthGroup.add(mesh);
+
+    const lineGeo = new THREE.BufferGeometry().setFromPoints(points3D);
+    const line = new THREE.LineLoop(lineGeo, lineMaterial.clone());
+    mesh.userData.outline = line; // Link outline to mesh
+    earthGroup.add(line);
+  };
+
+  if (type === 'Polygon') {
+    processPolygon(coords);
+  } else if (type === 'MultiPolygon') {
+    coords.forEach((polygon: any[]) => processPolygon(polygon));
+  }
+}
+
+// Interaction state tracking
+let currentHoveredCountryId: string | null = null;
+let currentHoveredLogisticsId: string | null = null;
+
+function onMouseMove(event: MouseEvent) {
+  event.preventDefault();
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(earthGroup.children, true);
+
+  let foundTarget: THREE.Object3D | null = null;
+
+  if (intersects.length > 0) {
+    for (const intersect of intersects) {
+       const obj = intersect.object;
+       // Ignore Earth, Atmosphere, and Outlines (if they are hit)
+       if (obj.name === 'EARTH' || obj === earthGroup.children.find(c => c.userData.type === 'atmosphere')) continue;
+       
+       if (obj.userData.type === 'country') {
+         foundTarget = obj;
+         break;
+       }
+       if (obj.userData.parentGroup) {
+         foundTarget = obj.userData.parentGroup;
+         break;
+       }
+       if (obj.parent && obj.parent.userData.type === 'logistics') {
+         foundTarget = obj.parent;
+         break;
+       }
+    }
+  }
+
+  // Handle Country Interaction
+  if (foundTarget && foundTarget.userData.type === 'country') {
+    const countryData = foundTarget.userData.data as CountryData;
+    
+    // If new country hovered
+    if (currentHoveredCountryId !== countryData.id) {
+        // Reset previous if any
+        if (currentHoveredCountryId) resetCountryHighlight();
+        
+        currentHoveredCountryId = countryData.id;
+        document.body.style.cursor = 'pointer';
+        
+        // Highlight all parts of this country
+        earthGroup.children.forEach(child => {
+            if (child.userData.type === 'country' && child.userData.data.id === countryData.id) {
+                // Scale up
+                gsap.to(child.scale, { x: 1.02, y: 1.02, z: 1.02, duration: 0.3 });
+                if (child.userData.outline) {
+                    gsap.to(child.userData.outline.scale, { x: 1.02, y: 1.02, z: 1.02, duration: 0.3 });
+                }
+                
+                // Change Color
+                if (child instanceof THREE.Mesh) {
+                    (child.material as THREE.MeshBasicMaterial).color.setHex(0x3388ff); // Brighter Blue
+                    (child.material as THREE.MeshBasicMaterial).opacity = 0.6;
+                }
+            }
+        });
+
+        // Show Tooltip
+        hoveredInfo.value = {
+            title: countryData.name,
+            details: {
+            '项目数': countryData.projectCount,
+            '收入': countryData.income + '亿',
+            '成本': countryData.cost + '亿',
+            '进度': countryData.progress + '%'
+            }
+        };
+    }
+    // Update tooltip position
+    tooltipPos.value = { x: event.clientX + 15, y: event.clientY + 15 };
+
+  } else {
+    // Not hovering country
+    if (currentHoveredCountryId) {
+        resetCountryHighlight();
+        currentHoveredCountryId = null;
+        document.body.style.cursor = 'default';
+        hoveredInfo.value = null;
+    }
+  }
+
+  // Handle Logistics Interaction (Simplified for conflict avoidance, prioritized country if both hit? 
+  // Actually loop above picks first hit. If logistics is on top, it wins. 
+  // But usually logistics is small. Let's add logistics logic if not hovering country)
+  
+  if (foundTarget && foundTarget.userData.type === 'logistics' && !currentHoveredCountryId) {
+      // Logic for logistics...
+      const logisticsData = foundTarget.userData.data as LogisticsItem;
+      if (currentHoveredLogisticsId !== logisticsData.id) {
+          if (currentHoveredLogisticsId) resetLogisticsHighlight();
+          currentHoveredLogisticsId = logisticsData.id;
+          
+          document.body.style.cursor = 'pointer';
+          gsap.to(foundTarget.scale, { x: 1.5, y: 1.5, z: 1.5, duration: 0.3 });
+          
+          hoveredInfo.value = {
+            title: logisticsData.name,
+            details: {
+                '类型': logisticsData.type,
+                '项目': logisticsData.project,
+                '预计到达': logisticsData.arrivalDate
+            }
+          };
+      }
+      tooltipPos.value = { x: event.clientX + 15, y: event.clientY + 15 };
+  } else {
+      if (currentHoveredLogisticsId && (!foundTarget || foundTarget.userData.type !== 'logistics')) {
+          resetLogisticsHighlight();
+          currentHoveredLogisticsId = null;
+          if (!currentHoveredCountryId) {
+            document.body.style.cursor = 'default';
+            hoveredInfo.value = null;
+          }
+      }
+  }
+}
+
+function resetCountryHighlight() {
+    if (!currentHoveredCountryId) return;
+    
+    earthGroup.children.forEach(child => {
+        if (child.userData.type === 'country' && child.userData.data.id === currentHoveredCountryId) {
+            // Reset Scale
+            gsap.to(child.scale, { x: 1, y: 1, z: 1, duration: 0.3 });
+            if (child.userData.outline) {
+                gsap.to(child.userData.outline.scale, { x: 1, y: 1, z: 1, duration: 0.3 });
+            }
+            
+            // Reset Color
+            if (child instanceof THREE.Mesh) {
+                (child.material as THREE.MeshBasicMaterial).color.setHex(child.userData.originalColor);
+                (child.material as THREE.MeshBasicMaterial).opacity = 0.3;
+            }
+        }
+    });
+}
+
+function resetLogisticsHighlight() {
+    if (!currentHoveredLogisticsId) return;
+    
+    earthGroup.children.forEach(child => {
+        // Check if it's the logistics group or part of it
+        if (child.userData.type === 'logistics' && child.userData.data.id === currentHoveredLogisticsId) {
+             gsap.to(child.scale, { x: 1, y: 1, z: 1, duration: 0.3 });
+        }
+    });
+}
 function createTruckModel(color: number): THREE.Group {
   const group = new THREE.Group();
   
@@ -372,7 +592,7 @@ function createTransportPath(start: THREE.Vector3, end: THREE.Vector3, color: nu
       if (type === 'plane') {
         const heightFactor = Math.sin(t * Math.PI); 
         const angle = start.angleTo(end);
-        const maxAltitude = EARTH_RADIUS * (1 + angle * 0.8); 
+        const maxAltitude = EARTH_RADIUS * (1 + angle * 0.2); // Reduced from 0.4 to 0.2
         altitude = EARTH_RADIUS + heightFactor * (maxAltitude - EARTH_RADIUS);
       }
       
@@ -579,80 +799,7 @@ function onWindowResize() {
   renderer.setSize(container.value.clientWidth, container.value.clientHeight);
 }
 
-function onMouseMove(event: MouseEvent) {
-  event.preventDefault();
-  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
-  raycaster.setFromCamera(mouse, camera);
-  const intersects = raycaster.intersectObjects(earthGroup.children, true);
-
-  let foundTarget: THREE.Object3D | null = null;
-
-  if (intersects.length > 0) {
-    for (const intersect of intersects) {
-       const obj = intersect.object;
-       // Ignore Earth and Atmosphere if they block interaction (optional, but good practice)
-       if (obj === earthGroup.children.find(c => c.name === 'EARTH')) continue;
-       
-       if (obj.userData.type === 'country') {
-         foundTarget = obj;
-         break;
-       }
-       if (obj.userData.parentGroup) {
-         foundTarget = obj.userData.parentGroup;
-         break;
-       }
-       if (obj.parent && obj.parent.userData.type === 'logistics') {
-         foundTarget = obj.parent;
-         break;
-       }
-    }
-  }
-
-  if (foundTarget) {
-    const obj = foundTarget;
-    if (obj.userData.type === 'country') {
-      document.body.style.cursor = 'pointer';
-      const data = obj.userData.data as CountryData;
-      hoveredInfo.value = {
-        title: data.name,
-        details: {
-          '项目数': data.projectCount,
-          '收入': data.income + '亿',
-          '成本': data.cost + '亿',
-          '进度': data.progress + '%'
-        }
-      };
-      tooltipPos.value = { x: event.clientX + 10, y: event.clientY + 10 };
-      // Highlight effect
-      obj.scale.setScalar(1.5);
-    } else if (obj.userData.type === 'logistics') {
-      document.body.style.cursor = 'pointer';
-      const data = obj.userData.data as LogisticsItem;
-      hoveredInfo.value = {
-        title: data.name,
-        details: {
-          '类型': data.type,
-          '项目': data.project,
-          '预计到达': data.arrivalDate
-        }
-      };
-      tooltipPos.value = { x: event.clientX + 10, y: event.clientY + 10 };
-      // Highlight
-      obj.scale.setScalar(1.5);
-    }
-  } else {
-    document.body.style.cursor = 'default';
-    hoveredInfo.value = null;
-    // Reset scales
-    earthGroup.children.forEach(child => {
-      if (child.userData.type === 'country' || child.userData.type === 'logistics') {
-        child.scale.setScalar(1);
-      }
-    });
-  }
-}
 
 function onClick(event: MouseEvent) {
   if (hoveredInfo.value) {
