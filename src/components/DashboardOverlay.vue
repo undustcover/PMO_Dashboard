@@ -26,42 +26,20 @@
 
     <!-- Left Panel -->
     <aside class="panel left-panel">
-      <!-- Personnel Stats -->
+      <!-- Rig Distribution Chart -->
       <div class="panel-block">
-        <h3><i class="icon-user"></i>人员动态</h3>
-        <div class="stat-grid">
-           <div class="stat-item">
-             <label>总人数</label>
-             <span class="val highlight">{{ personnelStats.total }}</span>
-           </div>
-           <div class="stat-item">
-             <label>中方人员</label>
-             <span class="val">{{ personnelStats.chinese }}</span>
-           </div>
-           <div class="stat-item">
-             <label>外籍人员</label>
-             <span class="val">{{ personnelStats.local }}</span>
-           </div>
-        </div>
+        <h3><i class="icon-pie-chart"></i>钻机分布</h3>
+        <div class="chart-container" id="rig-chart"></div>
       </div>
 
-      <!-- HSE Stats -->
+      <!-- Project Distribution Chart -->
       <div class="panel-block">
-        <h3><i class="icon-shield"></i>HSE 安全管理</h3>
-        <div class="stat-grid">
-           <div class="stat-item">
-             <label>安全工时(百万)</label>
-             <span class="val success">{{ hseStats.safeManHours }}</span>
-           </div>
-           <div class="stat-item">
-             <label>安全生产天数</label>
-             <span class="val success">{{ hseStats.safeDays }}</span>
-           </div>
-        </div>
+        <h3><i class="icon-pie-chart"></i>项目与收入分布</h3>
+        <div class="chart-container" id="project-dist-chart"></div>
       </div>
 
       <div class="panel-block flex-grow-col">
-        <h3><i class="icon-chart"></i>分公司项目概况</h3>
+        <h3><i class="icon-chart"></i>专业公司项目概况</h3>
         <div class="chart-container scrollable-content" id="branch-chart">
           <div v-for="branch in branchStats" :key="branch.name" class="branch-item">
             <div class="branch-name">{{ branch.name }}</div>
@@ -205,15 +183,16 @@
 </template>
 
 <script setup lang="ts">
-import { defineProps } from 'vue';
 import { useRouter } from 'vue-router';
+import * as echarts from 'echarts';
 import { useMockData, type LogisticsItem } from '../composables/useMockData';
+import { onMounted, onUnmounted } from 'vue';
 
 const router = useRouter();
 
 const { 
   companyStats, branchStats, keyProjects, contractStats,
-  hseStats, personnelStats, operationStats, regionStats 
+  operationStats, regionStats, rigDistribution, projectDistribution
 } = useMockData();
 
 defineProps<{
@@ -221,6 +200,169 @@ defineProps<{
 }>();
 
 defineEmits(['close-modal']);
+
+let rigChart: echarts.ECharts | null = null;
+let projectDistChart: echarts.ECharts | null = null;
+
+const initCharts = () => {
+  // Rig Distribution Chart
+  const rigDom = document.getElementById('rig-chart');
+  if (rigDom) {
+    rigChart = echarts.init(rigDom);
+    const totalRigs = rigDistribution.value.reduce((acc, curr) => acc + curr.value, 0);
+    
+    rigChart.setOption({
+      title: {
+        text: totalRigs + '',
+        subtext: '总数',
+        left: '59%', // Adjusted to match pie center visual
+        top: '48%',
+        textAlign: 'center',
+        textVerticalAlign: 'middle',
+        textStyle: {
+          fontSize: 28,
+          fontWeight: 'bold',
+          color: '#1e3a8a'
+        },
+        subtextStyle: {
+          fontSize: 14,
+          color: '#64748b'
+        }
+      },
+      tooltip: {
+        trigger: 'item',
+        formatter: '{b}: {c}台 ({d}%)'
+      },
+      legend: {
+        orient: 'vertical',
+        left: 'left',
+        textStyle: { color: '#64748b' },
+        formatter: (name: string) => {
+          const item = rigDistribution.value.find(i => i.name === name);
+          return item ? `${name} ${item.value}` : name;
+        }
+      },
+      series: [
+        {
+          name: '钻机分布',
+          type: 'pie',
+          radius: ['50%', '70%'],
+          avoidLabelOverlap: false,
+          itemStyle: {
+            borderRadius: 10,
+            borderColor: '#fff',
+            borderWidth: 2
+          },
+          label: {
+            show: false,
+            position: 'center'
+          },
+          emphasis: {
+            label: {
+              show: false
+            }
+          },
+          labelLine: {
+            show: false
+          },
+          data: rigDistribution.value,
+          center: ['60%', '50%']
+        }
+      ]
+    });
+  }
+
+  // Project Distribution Chart
+  const projectDom = document.getElementById('project-dist-chart');
+  if (projectDom) {
+    projectDistChart = echarts.init(projectDom);
+    const totalIncome = projectDistribution.value.reduce((acc, curr) => acc + curr.income, 0);
+    
+    projectDistChart.setOption({
+      title: {
+        text: totalIncome + '亿',
+        subtext: '预测总收',
+        left: '64%', // Adjusted to match pie center visual
+        top: '48%',
+        textAlign: 'center',
+        textVerticalAlign: 'middle',
+        textStyle: {
+          fontSize: 24,
+          fontWeight: 'bold',
+          color: '#1e3a8a'
+        },
+        subtextStyle: {
+          fontSize: 12,
+          color: '#64748b'
+        }
+      },
+      tooltip: {
+        trigger: 'item',
+        formatter: (params: any) => {
+          if (params.seriesIndex === 0) {
+            return `${params.name}<br/>项目数量: ${params.value}个 (${params.percent}%)`;
+          } else {
+            return `${params.name}<br/>预测收入: ${params.value}亿 (${params.percent}%)`;
+          }
+        }
+      },
+      legend: {
+        orient: 'vertical',
+        left: 'left',
+        top: 'center',
+        textStyle: { color: '#64748b', fontSize: 10 },
+        itemWidth: 10,
+        itemHeight: 10
+      },
+      series: [
+        // Outer Ring: Project Count
+        {
+          name: '项目数量',
+          type: 'pie',
+          radius: ['60%', '75%'],
+          center: ['65%', '50%'],
+          itemStyle: {
+            borderRadius: 5,
+            borderColor: '#fff',
+            borderWidth: 1
+          },
+          label: { show: false },
+          data: projectDistribution.value.map(item => ({ name: item.name, value: item.count }))
+        },
+        // Inner Ring: Projected Income
+        {
+          name: '预测收入',
+          type: 'pie',
+          radius: ['40%', '55%'],
+          center: ['65%', '50%'],
+          itemStyle: {
+            borderRadius: 5,
+            borderColor: '#fff',
+            borderWidth: 1
+          },
+          label: { show: false },
+          data: projectDistribution.value.map(item => ({ name: item.name, value: item.income }))
+        }
+      ]
+    });
+  }
+};
+
+onMounted(() => {
+  initCharts();
+  window.addEventListener('resize', handleResize);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize);
+  rigChart?.dispose();
+  projectDistChart?.dispose();
+});
+
+const handleResize = () => {
+  rigChart?.resize();
+  projectDistChart?.resize();
+};
 
 const formatType = (type: string) => {
   const map: Record<string, string> = {
@@ -410,6 +552,7 @@ $grad-text-title: linear-gradient(90deg, #1e293b 0%, #334155 100%);
       
       &.icon-user::after { mask-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>'); }
       &.icon-shield::after { mask-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V5l-9-4z"/></svg>'); }
+      &.icon-pie-chart::after { mask-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>'); stroke: currentColor; stroke-width: 2; fill: none; mask-image: none; }
       &.icon-chart::after { mask-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="12" width="4" height="8"/><rect x="10" y="8" width="4" height="12"/><rect x="17" y="4" width="4" height="16"/></svg>'); }
       &.icon-activity::after { mask-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>'); background: none; border-radius: 0; mask-image: none; }
       &.icon-globe::after { mask-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>'); background: none; border-radius: 0; mask-image: none; }
@@ -483,6 +626,12 @@ $grad-text-title: linear-gradient(90deg, #1e293b 0%, #334155 100%);
     border-radius: 10px;
     &:hover { background: #94a3b8; }
   }
+}
+
+.chart-container {
+  width: 100%;
+  height: 250px;
+  position: relative;
 }
 
 // Responsive adjustments for smaller screens (e.g. 1k resolution / laptops)

@@ -95,6 +95,17 @@ export interface RegionStat {
   percentage: number;
 }
 
+export interface RigDistributionItem {
+  name: string;
+  value: number;
+}
+
+export interface ProjectDistributionItem {
+  name: string;
+  count: number;
+  income: number; // In billions
+}
+
 // Mock Data Generator
 export function useMockData() {
   
@@ -276,6 +287,25 @@ export function useMockData() {
     { name: '亚太地区', count: 7, percentage: 16 }
   ]);
 
+  const rigDistribution = ref<RigDistributionItem[]>([
+    { name: '土库曼斯坦', value: 10 },
+    { name: '巴基斯坦', value: 9 },
+    { name: '厄瓜多尔', value: 8 },
+    { name: '秘鲁', value: 6 },
+    { name: '孟加拉国', value: 3 },
+    { name: '伊拉克', value: 2 }
+  ]);
+
+  const projectDistribution = ref<ProjectDistributionItem[]>([
+    { name: '土库曼斯坦', count: 15, income: 15 },
+    { name: '厄瓜多尔', count: 12, income: 8 },
+    { name: '巴基斯坦', count: 10, income: 2 },
+    { name: '孟加拉', count: 3, income: 5 },
+    { name: '伊拉克', count: 3, income: 3 },
+    { name: '秘鲁', count: 2, income: 3 },
+    { name: '中东', count: 2, income: 1 }
+  ]);
+
   return {
     countries,
     logistics,
@@ -286,6 +316,8 @@ export function useMockData() {
     hseStats,
     personnelStats,
     operationStats,
-    regionStats
+    regionStats,
+    rigDistribution,
+    projectDistribution
   };
 }
