@@ -163,7 +163,7 @@ export function useMockData() {
       type: 'material',
       transportType: 'ship',
       name: '高强度钻杆',
-      project: '厄瓜多尔14区块',
+      project: '厄瓜多尔19区块',
       startLocation: '天津港',
       startLat: 39.0842,
       startLon: 117.2009,
@@ -188,7 +188,7 @@ export function useMockData() {
       type: 'equipment',
       transportType: 'plane',
       name: '精密测井仪',
-      project: '伊拉克鲁迈拉项目',
+      project: '伊拉克AK项目',
       startLocation: '北京',
       startLat: 39.9042,
       startLon: 116.4074,
@@ -207,8 +207,8 @@ export function useMockData() {
       type: 'material',
       transportType: 'truck',
       name: '化工助剂',
-      project: '孟加拉项目',
-      startLocation: '昆明',
+      project: '孟加拉项三口井目',
+      startLocation: '阿拉山口',
       startLat: 24.8801,
       startLon: 102.8329,
       destination: '达卡',
@@ -240,10 +240,10 @@ export function useMockData() {
   ]);
 
   const keyProjects = ref<KeyProject[]>([
-    { name: '伊拉克鲁迈拉项目', progress: 92, workloadValue: 12.5, income: 4.2, profit: 0.8 },
+    { name: '伊拉克AK项目', progress: 92, workloadValue: 12.5, income: 4.2, profit: 0.8 },
     { name: '土库曼复兴气田', progress: 78, workloadValue: 8.3, income: 2.1, profit: 0.4 },
-    { name: '巴基斯坦卡拉奇项目', progress: 65, workloadValue: 5.1, income: 1.5, profit: 0.2 },
-    { name: '厄瓜多尔14区块', progress: 45, workloadValue: 3.2, income: 0.9, profit: 0.1 },
+    { name: '巴基斯坦OPI项目', progress: 65, workloadValue: 5.1, income: 1.5, profit: 0.2 },
+    { name: '厄瓜多尔19区块', progress: 45, workloadValue: 3.2, income: 0.9, profit: 0.1 },
   ]);
 
   const contractStats = ref<ContractStats>({

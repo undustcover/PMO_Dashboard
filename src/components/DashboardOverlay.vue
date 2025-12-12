@@ -6,15 +6,15 @@
         <h1 class="title">川庆国际项目管理驾驶舱</h1>
       </div>
       <div class="header-center">
-        <div class="kpi-card">
+        <div class="kpi-card clickable" @click="router.push('/project-stats')">
           <span class="label">项目总数</span>
           <span class="value gradient-text-blue">{{ companyStats.totalProjects }}</span>
         </div>
-        <div class="kpi-card">
+        <div class="kpi-card clickable" @click="router.push('/project-stats')">
           <span class="label">年度总收入(亿)</span>
           <span class="value gradient-text-purple">{{ companyStats.annualIncome }}</span>
         </div>
-        <div class="kpi-card">
+        <div class="kpi-card clickable" @click="router.push('/market-signing')">
           <span class="label">签约金额(亿)</span>
           <span class="value gradient-text-cyan">{{ companyStats.contractAmount }}</span>
         </div>
@@ -92,11 +92,11 @@
       <div class="panel-block">
         <h3><i class="icon-activity"></i>生产运行指标</h3>
         <div class="stat-grid">
-           <div class="stat-item">
+           <div class="stat-item clickable" @click="router.push('/footage')">
              <label>年度进尺(米)</label>
              <span class="val highlight">{{ operationStats.annualFootage }}</span>
            </div>
-           <div class="stat-item">
+           <div class="stat-item clickable" @click="router.push('/day-rate')">
              <label>日费运营天数</label>
              <span class="val">{{ operationStats.dayRateDays }}</span>
            </div>
@@ -118,7 +118,9 @@
       </div>
 
       <div class="panel-block flex-grow-col">
-        <h3><i class="icon-target"></i>重点项目监控</h3>
+        <h3 class="clickable-header" @click="router.push('/key-projects')">
+          <i class="icon-target"></i>重点项目监控 <span class="arrow">→</span>
+        </h3>
         <div class="project-list scrollable-content">
           <div v-for="project in keyProjects" :key="project.name" class="project-item">
             <div class="project-header">
@@ -137,7 +139,9 @@
       </div>
 
       <div class="panel-block">
-        <h3><i class="icon-file"></i>合同执行情况</h3>
+        <h3 class="clickable-header" @click="router.push('/contracts')">
+          <i class="icon-file"></i>合同执行情况 <span class="arrow">→</span>
+        </h3>
         <div class="contract-stats">
           <div class="stat-row">
             <span>总金额</span>
@@ -202,7 +206,10 @@
 
 <script setup lang="ts">
 import { defineProps } from 'vue';
+import { useRouter } from 'vue-router';
 import { useMockData, type LogisticsItem } from '../composables/useMockData';
+
+const router = useRouter();
 
 const { 
   companyStats, branchStats, keyProjects, contractStats,
@@ -409,6 +416,29 @@ $grad-text-title: linear-gradient(90deg, #1e293b 0%, #334155 100%);
       &.icon-target::after { mask-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>'); background: none; border-radius: 0; mask-image: none; }
       &.icon-file::after { mask-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'); }
     }
+
+    &.clickable-header {
+      cursor: pointer;
+      justify-content: space-between;
+      transition: color 0.2s;
+
+      .arrow {
+        opacity: 0;
+        transform: translateX(-5px);
+        transition: all 0.2s;
+        font-size: 14px;
+        color: #3b82f6;
+      }
+
+      &:hover {
+        color: #2563eb;
+        
+        .arrow {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+    }
   }
   
   .panel-block {
@@ -517,17 +547,23 @@ $grad-text-title: linear-gradient(90deg, #1e293b 0%, #334155 100%);
   gap: 16px;
   
   .stat-item {
-    background: rgba(255,255,255,0.5);
-    padding: 16px;
-    border-radius: 16px;
     display: flex;
     flex-direction: column;
-    border: 1px solid rgba(255,255,255,0.6);
-    transition: transform 0.2s;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.5);
+    padding: 15px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.6);
     
-    &:hover {
-      transform: translateY(-2px);
-      background: rgba(255,255,255,0.8);
+    &.clickable {
+      cursor: pointer;
+      transition: all 0.3s ease;
+      
+      &:hover {
+        background: rgba(255, 255, 255, 0.8);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+      }
     }
     
     label { font-size: 12px; color: $text-secondary; margin-bottom: 6px; font-weight: 600; }

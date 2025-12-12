@@ -2,10 +2,24 @@
   <div class="country-detail-overlay">
     <!-- Header with Glass Effect -->
     <header class="detail-header">
-      <button class="back-btn" @click="$emit('back')">
-        <i class="icon-back">←</i> 返回世界视图
-      </button>
-      <h1 class="title">{{ country.name }} 项目详情</h1>
+      <div class="header-left-section">
+        <button class="back-btn" @click="$emit('back')">
+          <i class="icon-back">←</i> 返回世界视图
+        </button>
+        <h1 class="title">{{ country.name }} 项目详情</h1>
+      </div>
+      
+      <div class="header-right-info">
+        <div class="info-group time-group">
+          <span class="date">{{ currentDate }}</span>
+          <span class="time">{{ currentTime }}</span>
+        </div>
+        <div class="info-group weather-group">
+          <span class="weather-icon">{{ weatherInfo.icon }}</span>
+          <span class="weather-temp">{{ weatherInfo.temp }}</span>
+          <span class="weather-cond">{{ weatherInfo.condition }}</span>
+        </div>
+      </div>
     </header>
     
     <div class="detail-container">
@@ -39,7 +53,7 @@
           <div class="project-list scrollable-content">
             <div v-for="i in country.projectCount" :key="i" class="project-item">
               <div class="item-header">
-                <span class="team-name">第{{ 100 + i }}钻井队</span>
+                <span class="team-name">CC7000{{ i }}钻井队</span>
                 <span class="status-badge">进行中</span>
               </div>
               <div class="project-name">{{ country.name }}区块{{ i }}号井项目</div>
@@ -63,7 +77,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, defineProps, watch } from 'vue';
+import { ref, onMounted, defineProps, watch, onUnmounted, computed } from 'vue';
 import * as echarts from 'echarts';
 import type { CountryData } from '../composables/useMockData';
 
@@ -75,6 +89,88 @@ defineEmits(['back']);
 
 const mapChart = ref<HTMLElement | null>(null);
 let myChart: echarts.ECharts | null = null;
+
+// Weather and Time Logic
+const currentDate = ref('');
+const currentTime = ref('');
+const weatherInfo = ref({ temp: '25°C', condition: '晴', icon: '☀️' });
+let timer: any = null;
+
+const timeZoneMap: Record<string, string> = {
+  'TM': 'Asia/Ashgabat',
+  'PK': 'Asia/Karachi',
+  'EC': 'America/Guayaquil',
+  'BD': 'Asia/Dhaka',
+  'IQ': 'Asia/Baghdad',
+  'PE': 'America/Lima',
+  'CN': 'Asia/Shanghai'
+};
+
+const weatherMockMap: Record<string, { temp: string; condition: string; icon: string }> = {
+  'TM': { temp: '32°C', condition: '晴', icon: '☀️' },
+  'PK': { temp: '35°C', condition: '多云', icon: '⛅' },
+  'EC': { temp: '22°C', condition: '小雨', icon: '🌧️' },
+  'BD': { temp: '29°C', condition: '雷阵雨', icon: '⛈️' },
+  'IQ': { temp: '38°C', condition: '晴', icon: '☀️' },
+  'PE': { temp: '18°C', condition: '阴', icon: '☁️' },
+  'CN': { temp: '24°C', condition: '晴', icon: '☀️' }
+};
+
+const updateTime = () => {
+  const iso2 = props.country.id;
+  const timeZone = timeZoneMap[iso2] || 'UTC';
+  
+  const now = new Date();
+  
+  try {
+    const dateOptions: Intl.DateTimeFormatOptions = { 
+      timeZone, 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric', 
+      weekday: 'long' 
+    };
+    const timeOptions: Intl.DateTimeFormatOptions = { 
+      timeZone, 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      second: '2-digit', 
+      hour12: false 
+    };
+    
+    currentDate.value = new Intl.DateTimeFormat('zh-CN', dateOptions).format(now);
+    currentTime.value = new Intl.DateTimeFormat('zh-CN', timeOptions).format(now);
+  } catch (e) {
+    console.error('Timezone error:', e);
+    currentDate.value = now.toLocaleDateString();
+    currentTime.value = now.toLocaleTimeString();
+  }
+};
+
+const updateWeather = () => {
+  const iso2 = props.country.id;
+  weatherInfo.value = weatherMockMap[iso2] || { temp: '25°C', condition: '晴', icon: '☀️' };
+};
+
+onMounted(() => {
+  initMap();
+  window.addEventListener('resize', () => myChart?.resize());
+  
+  updateTime();
+  updateWeather();
+  timer = setInterval(updateTime, 1000);
+});
+
+onUnmounted(() => {
+  if (timer) clearInterval(timer);
+});
+
+// Watch for country changes
+watch(() => props.country, () => {
+  initMap();
+  updateTime();
+  updateWeather();
+});
 
 const initMap = () => {
   if (!mapChart.value) return;
@@ -287,9 +383,16 @@ $grad-purple: linear-gradient(135deg, #7c3aed 0%, #c084fc 100%);
 
 .detail-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
   margin-bottom: 24px;
   position: relative;
+  
+  .header-left-section {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
   
   .back-btn {
     display: flex;
@@ -297,30 +400,76 @@ $grad-purple: linear-gradient(135deg, #7c3aed 0%, #c084fc 100%);
     gap: 8px;
     padding: 10px 24px;
     background: white;
-    border: 1px solid #e2e8f0;
-    color: $text-primary;
-    cursor: pointer;
-    border-radius: 100px;
+    border: none;
+    border-radius: 12px;
+    color: #3b82f6;
     font-weight: 600;
-    font-size: 14px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-    transition: all 0.2s;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+    transition: all 0.2s ease;
     
-    &:hover { 
-      background: #f8fafc;
-      transform: translateX(-2px);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    &:hover {
+      background: #eff6ff;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(59, 130, 246, 0.25);
     }
   }
-  
+
   .title {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
+    margin: 0;
     font-size: 28px;
     font-weight: 800;
-    margin: 0;
-    color: #1e3a8a;
+    background: $grad-primary;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .header-right-info {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    
+    .info-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 20px;
+      background: rgba(255, 255, 255, 0.6);
+      border-radius: 16px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      backdrop-filter: blur(8px);
+    }
+    
+    .time-group {
+      .date {
+        color: $text-secondary;
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .time {
+        color: #1e3a8a;
+        font-size: 18px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+      }
+    }
+    
+    .weather-group {
+      .weather-icon {
+        font-size: 20px;
+      }
+      .weather-temp {
+        font-size: 18px;
+        font-weight: 700;
+        color: #1e3a8a;
+      }
+      .weather-cond {
+        color: $text-secondary;
+        font-size: 14px;
+        font-weight: 500;
+      }
+    }
   }
 }
 
